@@ -166,6 +166,11 @@ Tokens:
 - Can monitor multiple addresses
 - Rate limited by Explorer API
 
+## 🧪 Testing
+
+- Install test dependencies: `pip install pytest pytest-asyncio`
+- Run the Telegram notification suite: `python -m pytest tests/test_notifications.py`
+
 ## 🤝 Contributing
 
 Contributions welcome! Please feel free to submit a Pull Request.
