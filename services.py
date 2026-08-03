@@ -77,13 +77,6 @@ class TransactionAnalyzer:
         else:  # Mixed
             value = output_value - input_value
         
-        # Calculate miner fee
-        fee = sum(
-            out.get('value', 0) / 1e9 
-            for out in outputs 
-            if out.get('address') == "Ergo Platform (Miner Fee)"
-        )
-        
         # Find counterparties
         from_addresses = set()
         to_addresses = set()
@@ -141,19 +134,15 @@ class TransactionAnalyzer:
                     decimals=decimals
                 ))
         
-        # Determine transaction status
-        is_mempool = tx.get('mempool', False)
-        status = "Pending" if is_mempool else "Confirmed"
-        
         return Transaction(
             tx_type=tx_type,
             value=value,
-            fee=fee,
+            fee=0.0,
             from_address=from_address,
             to_address=to_address,
             tokens=tokens,
             tx_id=tx.get('id'),
-            block=None if is_mempool else (tx.get('inclusionHeight') or tx.get('height')),
+            block=None,
             timestamp=datetime.fromtimestamp(tx.get('timestamp', 0) / 1000),
-            status=status
+            status="Pending"
         )
