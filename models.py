@@ -1,5 +1,4 @@
 # models.py
-from __javascript__ import __goog__
 from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
