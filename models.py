@@ -13,12 +13,13 @@ class Token:
     
     def get_formatted_amount(self) -> str:
         """Get amount formatted with proper decimals"""
-        if self.decimals is None:
-            return str(self.amount)
+        # Handle tokens with 0 decimals or unknown decimals cleanly
+        if self.decimals is None or self.decimals == 0:
+            return f"{'-' if self.amount < 0 else ''}{abs(self.amount)}"
         
         amount_str = str(abs(self.amount)).zfill(self.decimals + 1)
         int_part = amount_str[:-self.decimals] if len(amount_str) > self.decimals else "0"
-        dec_part = amount_str[-self.decimals:] if self.decimals > 0 else ""
+        dec_part = amount_str[-self.decimals:]
         
         formatted = f"{int_part}"
         if dec_part:
@@ -35,7 +36,7 @@ class Transaction:
     tokens: List[Token]
     tx_id: str
     timestamp: datetime
-    fee: float = 0
+    fee: float = 0.0
     from_address: Optional[str] = None
     to_address: Optional[str] = None
     block: Optional[int] = None
