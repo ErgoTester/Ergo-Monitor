@@ -32,14 +32,14 @@ class Token:
 class Transaction:
     tx_type: str
     value: float
-    fee: float
-    from_address: Optional[str]
-    to_address: Optional[str]
     tokens: List[Token]
     tx_id: str
-    block: Optional[int]
     timestamp: datetime
-    status: str
+    fee: float = 0
+    from_address: Optional[str] = None
+    to_address: Optional[str] = None
+    block: Optional[int] = None
+    status: str = "unknown"
 
 @dataclass
 class AddressInfo:
