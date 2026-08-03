@@ -1,3 +1,4 @@
+# notifications.py
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, Optional, List, Dict
@@ -14,34 +15,29 @@ class LogHandler(TransactionHandler):
         self.logger = logging.getLogger(self.__class__.__name__)
 
     async def handle_transaction(self, address: str, transaction: Transaction, monitor: ErgoTransactionMonitor) -> None:
-        """Handle transaction notification with decimal-aware token amounts"""
-        tx_direction = "Received" if transaction.value > 0 else "Sent" if transaction.value < 0 else "Mixed"
+        """Handle log transaction notification matching requested format"""
         wallet_name = next((info.nickname for info in monitor.watched_addresses.values() if info.address == address), address[:8])
         
-        message = [
-            f"=== {wallet_name} Transaction ===",
-            f"Type: {tx_direction}",
-            f"Block: {transaction.block}",
-            f"Status: {transaction.status}",
-            f"Amount: {transaction.value:+.8f} ERG",
-        ]
-        
-        if transaction.fee > 0:
-            message.append(f"Fee: {transaction.fee:.8f} ERG")
-        
-        if transaction.from_address:
-            message.append(f"From: {transaction.from_address}")
-        if transaction.to_address:
-            message.append(f"To: {transaction.to_address}")
+        if transaction.value < 0:
+            header = f'➜ Outgoing TX from "{wallet_name}"'
+        elif transaction.value > 0:
+            header = f'Incoming TX to "{wallet_name}"'
+        else:
+            header = f'🔄 Mixed TX for "{wallet_name}"'
             
-        if transaction.tokens:
-            message.append("Tokens:")
-            for token in sorted(transaction.tokens, key=lambda x: abs(x.amount), reverse=True):
-                token_name = token.name or f"[{token.token_id[:12]}...]"
-                formatted_amount = token.get_formatted_amount()
-                message.append(f"  {'+' if token.amount > 0 else ''}{formatted_amount} {token_name}")
+        message = [header]
         
-        message.append(f"Tx ID: {transaction.tx_id}")
+        if transaction.value != 0:
+            sign = "+" if transaction.value > 0 else "-"
+            message.append(f"{sign} {abs(transaction.value):.8f} ERG".strip())
+            
+        for token in sorted(transaction.tokens, key=lambda x: abs(x.amount), reverse=True):
+            token_name = token.name or f"[{token.token_id[:12]}...]"
+            formatted_amount = token.get_formatted_amount()
+            sign = "+" if token.amount > 0 else "-"
+            message.append(f"{sign} {formatted_amount} {token_name}")
+            
+        message.append(f"https://ergexplorer.com/transactions#{transaction.tx_id}")
         
         self.logger.info("\n".join(message) + "\n")
 
@@ -52,7 +48,6 @@ class TelegramDestination:
     topic_id: Optional[int] = None
     
     def __post_init__(self):
-        # Ensure chat_id is a string and properly formatted
         self.chat_id = str(self.chat_id)
         if not self.chat_id.startswith('-100'):
             self.chat_id = f"-100{self.chat_id.lstrip('-')}"
@@ -84,51 +79,35 @@ class MultiTelegramHandler(TransactionHandler):
             self.session = None
 
     def get_destinations_for_address(self, address: str) -> List[TelegramDestination]:
-        """Get all destinations that should receive notifications for this address"""
         destinations = []
-        
-        # Add address-specific destinations if they exist
         if address in self.address_configs:
             destinations.extend(self.address_configs[address].destinations)
-        
-        # Add default destination if no specific destinations were found
         if not destinations and self.default_destination:
             destinations.append(self.default_destination)
-        
         return destinations
 
     async def handle_transaction(self, address: str, transaction: Transaction, monitor: ErgoTransactionMonitor) -> None:
-        """Handle Telegram transaction notification without balance information"""
-        tx_direction = "Received" if transaction.value > 0 else "Sent" if transaction.value < 0 else "Mixed"
         wallet_name = next((info.nickname for info in monitor.watched_addresses.values() if info.address == address), address[:8])
         
-        message = [
-            f"🔄 *{wallet_name} Transaction*",
-            f"Type: {tx_direction}",
-            f"Status: {'⏳' if transaction.status == 'Pending' else '✅'} {transaction.status}",
-            f"Amount: `{transaction.value:+.8f}` ERG"
-        ]
+        if transaction.value < 0:
+            header = f'➜ Outgoing TX from "{wallet_name}"'
+        elif transaction.value > 0:
+            header = f'Incoming TX to "{wallet_name}"'
+        else:
+            header = f'🔄 Mixed TX for "{wallet_name}"'
+            
+        message = [header]
         
-        if transaction.block:
-            message.append(f"Block: `{transaction.block}`")
-        
-        if transaction.fee > 0:
-            message.append(f"Fee: `{transaction.fee:.8f}` ERG")
-        
-        if transaction.from_address:
-            message.append(f"From: `{transaction.from_address}`")
-        if transaction.to_address:
-            message.append(f"To: `{transaction.to_address}`")
-        
-        if transaction.tokens:
-            message.append("\n*Tokens:*")
-            for token in sorted(transaction.tokens, key=lambda x: abs(x.amount), reverse=True):
-                token_name = token.name or f"[{token.token_id[:12]}...]"
-                # Use formatted amount with decimals
-                formatted_amount = token.get_formatted_amount()
-                prefix = "+" if token.amount > 0 else ""
-                message.append(f"`{prefix}{formatted_amount}` {token_name}")
-        
+        if transaction.value != 0:
+            sign = "+" if transaction.value > 0 else "-"
+            message.append(f"`{sign} {abs(transaction.value):.8f}` ERG")
+            
+        for token in sorted(transaction.tokens, key=lambda x: abs(x.amount), reverse=True):
+            token_name = token.name or f"[{token.token_id[:12]}...]"
+            formatted_amount = token.get_formatted_amount()
+            sign = "+" if token.amount > 0 else "-"
+            message.append(f"`{sign} {formatted_amount}` {token_name}")
+            
         message.append(f"\n[View Transaction](https://ergexplorer.com/transactions#{transaction.tx_id})")
 
         message_text = "\n".join(message)
@@ -141,6 +120,7 @@ class MultiTelegramHandler(TransactionHandler):
                     self.logger.error(f"Failed to send message to chat ID: {dest.chat_id}")
             except Exception as e:
                 self.logger.error(f"Error sending message to chat ID {dest.chat_id}: {str(e)}")
+
     async def send_message(self, text: str, destination: TelegramDestination) -> bool:
         try:
             await self.init_session()
@@ -153,24 +133,16 @@ class MultiTelegramHandler(TransactionHandler):
                 "disable_web_page_preview": True
             }
             
-            # Add message_thread_id for forum topics
             if destination.topic_id is not None:
                 payload["message_thread_id"] = int(destination.topic_id)
-            
-            self.logger.debug(f"Sending Telegram message with payload: {payload}")
             
             async with self.session.post(url, json=payload) as response:
                 response_data = await response.json()
                 if response.status == 200 and response_data.get('ok'):
-                    self.logger.info(f"Successfully sent Telegram message to chat_id: {destination.chat_id}" + 
-                                   (f" topic_id: {destination.topic_id}" if destination.topic_id else ""))
                     return True
                 else:
                     error_msg = response_data.get('description', 'Unknown error')
-                    self.logger.error(f"Failed to send Telegram message. Status: {response.status}, "
-                                   f"Error: {error_msg}, "
-                                   f"Chat ID: {destination.chat_id}, "
-                                   f"Topic ID: {destination.topic_id}")
+                    self.logger.error(f"Failed to send Telegram message. Status: {response.status}, Error: {error_msg}")
                     return False
                         
         except Exception as e:
