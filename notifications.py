@@ -48,9 +48,8 @@ class TelegramDestination:
     topic_id: Optional[int] = None
     
     def __post_init__(self):
-        self.chat_id = str(self.chat_id)
-        if not self.chat_id.startswith('-100'):
-            self.chat_id = f"-100{self.chat_id.lstrip('-')}"
+        # Keeps your chat_id clean and respects whatever is set in config (no forced -100)
+        self.chat_id = str(self.chat_id).strip()
 
 @dataclass
 class TelegramConfig:
@@ -140,10 +139,21 @@ class MultiTelegramHandler(TransactionHandler):
                 response_data = await response.json()
                 if response.status == 200 and response_data.get('ok'):
                     return True
-                else:
-                    error_msg = response_data.get('description', 'Unknown error')
-                    self.logger.error(f"Failed to send Telegram message. Status: {response.status}, Error: {error_msg}")
-                    return False
+                
+                # Resilient fallback: if Markdown syntax rejects it, retry cleanly as plain text
+                if response.status == 400:
+                    self.logger.warning("Markdown parse failed, retrying message as plain text...")
+                    payload.pop("parse_mode", None)
+                    async with self.session.post(url, json=payload) as retry_response:
+                        retry_data = await retry_response.json()
+                        if retry_response.status == 200 and retry_data.get('ok'):
+                            return True
+                        error_msg = retry_data.get('description', 'Unknown error')
+                        self.logger.error(f"Failed plain text fallback. Status: {retry_response.status}, Error: {error_msg}")
+                
+                error_msg = response_data.get('description', 'Unknown error')
+                self.logger.error(f"Failed to send Telegram message. Status: {response.status}, Error: {error_msg}")
+                return False
                         
         except Exception as e:
             self.logger.error(f"Error sending Telegram message: {str(e)}", exc_info=True)
