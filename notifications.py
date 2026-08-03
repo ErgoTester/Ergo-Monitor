@@ -49,7 +49,6 @@ class TelegramDestination:
     topic_id: Optional[int] = None
     
     def __post_init__(self):
-        # Keeps your chat_id clean and respects whatever is set in config (no forced -100)
         self.chat_id = str(self.chat_id).strip()
 
 @dataclass
@@ -127,10 +126,10 @@ class MultiTelegramHandler(TransactionHandler):
             await self.init_session()
             url = f"{self.base_url}/sendMessage"
             
-            # Using plain text (no Markdown parse_mode) to ensure default text sizing and avoid bugs
             payload = {
                 "chat_id": destination.chat_id,
                 "text": text,
+                "parse_mode": "Markdown",
                 "disable_web_page_preview": True
             }
             
@@ -145,7 +144,7 @@ class MultiTelegramHandler(TransactionHandler):
                 error_msg = response_data.get('description', 'Unknown error')
                 self.logger.error(f"Failed to send Telegram message. Status: {response.status}, Error: {error_msg}")
                 return False
-                        
+                    
         except Exception as e:
             self.logger.error(f"Error sending Telegram message: {str(e)}", exc_info=True)
             return False
