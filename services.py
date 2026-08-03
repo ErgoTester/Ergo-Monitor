@@ -4,7 +4,7 @@ from typing import Dict, List, Set, Tuple, Optional, DefaultDict
 from collections import defaultdict
 import logging
 from datetime import datetime
-from models import Token, Transaction, TokenBalance, WalletBalance
+from models import Token, Transaction
 
 class TokenInfoCache:
     """Cache for token information to avoid repeated API calls"""
@@ -157,51 +157,3 @@ class TransactionAnalyzer:
             timestamp=datetime.fromtimestamp(tx.get('timestamp', 0) / 1000),
             status=status
         )
-
-class BalanceTracker:
-    @staticmethod
-    async def get_current_balance(explorer_client: ExplorerClient, address: str) -> WalletBalance:
-        """Get current balance for an address from unspent boxes"""
-        try:
-            url = f"{explorer_client.explorer_url}/boxes/unspent/byAddress/{address}"
-            unspent_boxes = await explorer_client._make_request(url)
-            
-            if not isinstance(unspent_boxes, list):
-                unspent_boxes = unspent_boxes.get('items', []) if unspent_boxes else []
-            
-            total_erg = 0.0
-            token_balances: Dict[str, TokenBalance] = {}
-            
-            # Calculate balances from each box
-            for box in unspent_boxes:
-                total_erg += box.get('value', 0) / 1e9
-                
-                # Process tokens with decimals
-                for asset in box.get('assets', []):
-                    token_id = asset.get('tokenId')
-                    if token_id:
-                        amount = asset.get('amount', 0)
-                        name = asset.get('name')
-                        
-                        if token_id in token_balances:
-                            token_balances[token_id].amount += amount
-                            if name and not token_balances[token_id].name:
-                                token_balances[token_id].name = name
-                        else:
-                            # Fetch token decimals when first encountering a token
-                            decimals = await TokenInfoCache.get_token_decimals(explorer_client, token_id)
-                            token_balances[token_id] = TokenBalance(
-                                token_id=token_id,
-                                amount=amount,
-                                name=name,
-                                decimals=decimals
-                            )
-            
-            return WalletBalance(
-                erg_balance=total_erg,
-                tokens=token_balances
-            )
-            
-        except Exception as e:
-            logging.error(f"Error getting balance for {address}: {str(e)}")
-            return WalletBalance()
