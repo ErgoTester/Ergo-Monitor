@@ -1,3 +1,4 @@
+# main.py
 from __future__ import annotations
 import logging
 import asyncio
@@ -77,28 +78,22 @@ async def main():
     else:
         logger.warning("Telegram configuration missing or incomplete. Skipping Telegram notifications.")
     
-    # Initialize monitor
-    monitor = ErgoTransactionMonitor(explorer_client, handlers)
-    
-    # Initialize monitor with configured daily report hour
+    # Initialize monitor with stripped down constructor (no daily reports)
     monitoring_config = config.get('monitoring', {})
     hours_lookback = monitoring_config.get('hours_lookback', 1)
-    daily_report_hour = monitoring_config.get('daily_report_hour', 12)
     
     monitor = ErgoTransactionMonitor(
-        explorer_client, 
-        handlers,
-        daily_report_hour=daily_report_hour
+        explorer_client=explorer_client, 
+        transaction_handlers=handlers
     )
     
-    # Add addresses from config with balance reporting configuration
+    # Add addresses from config (removed report_balance argument)
     for addr_config in config.get('addresses', []):
         try:
             monitor.add_address(
-                addr_config['address'],
-                addr_config.get('nickname'),
-                hours_lookback=hours_lookback,
-                report_balance=addr_config.get('report_balance', True)  # Default to True if not specified
+                address=addr_config['address'],
+                nickname=addr_config.get('nickname'),
+                hours_lookback=hours_lookback
             )
         except Exception as e:
             logger.error(f"Error adding address {addr_config.get('nickname', 'unknown')}: {str(e)}")
