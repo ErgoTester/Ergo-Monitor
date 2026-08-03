@@ -38,7 +38,7 @@ class LogHandler(TransactionHandler):
             sign = "+" if token.amount > 0 else "-"
             message.append(f"{sign} {formatted_amount} {token_name}")
             
-        message.append(f"https://ergexplorer.com/transactions#{transaction.tx_id}")
+        message.append(f"\n[View Transaction](https://ergexplorer.com/transactions#{transaction.tx_id})")
         
         self.logger.info("\n".join(message) + "\n")
 
