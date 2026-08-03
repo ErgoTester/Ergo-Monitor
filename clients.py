@@ -96,10 +96,11 @@ class ExplorerClient(BaseClient):
         return {}  # Return empty dict if all retries failed
 
     async def get_address_transactions(self, address: str, offset: int = 0) -> List[Dict]:
+        """Fetch only mempool transactions to minimize API calls"""
         try:
             transactions = []
             
-            # Get mempool transactions
+            # Get mempool transactions exclusively
             mempool_url = f"{self.explorer_url}/mempool/transactions/byAddress/{address}"
             mempool_data = await self._make_request(mempool_url)
             
@@ -116,26 +117,14 @@ class ExplorerClient(BaseClient):
                     formatted_tx = self._format_mempool_transaction(tx)
                     transactions.append(formatted_tx)
             
-            # Get confirmed transactions
-            transactions_url = f"{self.explorer_url}/addresses/{address}/transactions"
-            params = {
-                'offset': offset,
-                'limit': 50,  # Reasonable limit per request
-                'sortDirection': 'desc'
-            }
-            
-            confirmed_data = await self._make_request(transactions_url, params)
-            if isinstance(confirmed_data, dict):
-                transactions.extend(confirmed_data.get('items', []))
-            
             return transactions
 
         except Exception as e:
-            self.logger.error(f"Error getting transactions: {str(e)}")
+            self.logger.error(f"Error getting mempool transactions: {str(e)}")
             return []
 
     def _format_mempool_transaction(self, tx: Dict) -> Dict:
-        """Format mempool transaction to match confirmed transaction structure"""
+        """Format mempool transaction to match transaction structure"""
         if not isinstance(tx, dict):
             return {}
             
