@@ -13,24 +13,18 @@ class TokenInfoCache:
 
     @classmethod
     async def get_token_info(cls, explorer_client: ExplorerClient, token_id: str) -> Dict:
-        """Get token information with caching"""
         if token_id not in cls._cache:
             try:
                 url = f"{explorer_client.explorer_url}/tokens/{token_id}"
                 token_info = await explorer_client._make_request(url)
-                if token_info:
-                    cls._cache[token_id] = token_info
-                else:
-                    cls._cache[token_id] = {"decimals": 0}
+                cls._cache[token_id] = token_info if token_info else {"decimals": 0}
             except Exception as e:
                 cls._logger.error(f"Error fetching token info for {token_id}: {str(e)}")
                 cls._cache[token_id] = {"decimals": 0}
-        
         return cls._cache[token_id]
 
     @classmethod
     async def get_token_decimals(cls, explorer_client: ExplorerClient, token_id: str) -> int:
-        """Get token decimals with caching"""
         token_info = await cls.get_token_info(explorer_client, token_id)
         return token_info.get("decimals", 0)
 
@@ -102,12 +96,7 @@ class TransactionAnalyzer:
         return Transaction(
             tx_type=tx_type,
             value=value,
-            fee=0.0,
-            from_address=None,
-            to_address=None,
             tokens=tokens,
             tx_id=tx.get('id'),
-            block=None,
-            timestamp=datetime.fromtimestamp(tx.get('timestamp', 0) / 1000),
-            status="Pending"
+            timestamp=datetime.fromtimestamp(tx.get('timestamp', 0) / 1000)
         )
