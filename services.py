@@ -21,10 +21,10 @@ class TokenInfoCache:
                 if token_info:
                     cls._cache[token_id] = token_info
                 else:
-                    cls._cache[token_id] = {"decimals": 0}  # Default if not found
+                    cls._cache[token_id] = {"decimals": 0}
             except Exception as e:
                 cls._logger.error(f"Error fetching token info for {token_id}: {str(e)}")
-                cls._cache[token_id] = {"decimals": 0}  # Default on error
+                cls._cache[token_id] = {"decimals": 0}
         
         return cls._cache[token_id]
 
@@ -37,10 +37,6 @@ class TokenInfoCache:
 class TransactionAnalyzer:
     @staticmethod
     def determine_transaction_type(tx: Dict, address: str) -> str:
-        """
-        Determine if this is an incoming, outgoing, or mixed transaction
-        by analyzing inputs and outputs.
-        """
         our_input_boxes = [box for box in tx.get('inputs', []) if box.get('address') == address]
         our_output_boxes = [box for box in tx.get('outputs', []) if box.get('address') == address]
         
@@ -54,22 +50,17 @@ class TransactionAnalyzer:
 
     @staticmethod
     async def extract_transaction_details(tx: Dict, address: str, explorer_client: ExplorerClient) -> Transaction:
-        """Extract detailed transaction information including value transfers and token movements."""
         inputs = tx.get('inputs', [])
         outputs = tx.get('outputs', [])
         
-        # Track which boxes belong to our address
         our_input_boxes = [box for box in inputs if box.get('address') == address]
         our_output_boxes = [box for box in outputs if box.get('address') == address]
         
-        # Determine transaction type
         tx_type = TransactionAnalyzer.determine_transaction_type(tx, address)
         
-        # Calculate value changes with proper signs
         input_value = sum(box.get('value', 0) / 1e9 for box in our_input_boxes)
         output_value = sum(box.get('value', 0) / 1e9 for box in our_output_boxes)
         
-        # Calculate net value change with proper sign
         if tx_type == "Out":
             value = -(input_value - output_value)
         elif tx_type == "In":
@@ -77,34 +68,10 @@ class TransactionAnalyzer:
         else:  # Mixed
             value = output_value - input_value
         
-        # Find counterparties
-        from_addresses = set()
-        to_addresses = set()
-        
-        if tx_type in ["Out", "Mixed"]:
-            for out in outputs:
-                out_address = out.get('address')
-                if (out_address and 
-                    out_address != address and 
-                    out_address != "Ergo Platform (Miner Fee)"):
-                    to_addresses.add(out_address)
-        
-        if tx_type in ["In", "Mixed"]:
-            for inp in inputs:
-                inp_address = inp.get('address')
-                if inp_address and inp_address != address:
-                    from_addresses.add(inp_address)
-        
-        # Format addresses
-        from_address = ', '.join(addr[:10] + '...' + addr[-4:] for addr in from_addresses) if from_addresses else None
-        to_address = ', '.join(addr[:10] + '...' + addr[-4:] for addr in to_addresses) if to_addresses else None
-        
-        # Track token movements with decimals
         token_changes: DefaultDict[str, Dict] = defaultdict(
             lambda: {"amount": 0, "name": None, "decimals": None}
         )
         
-        # Process input tokens (negative for our inputs)
         for box in our_input_boxes:
             for asset in box.get('assets', []):
                 token_id = asset.get('tokenId')
@@ -113,7 +80,6 @@ class TransactionAnalyzer:
                 if not token_changes[token_id]["name"]:
                     token_changes[token_id]["name"] = asset.get('name')
         
-        # Process output tokens (positive for our outputs)
         for box in our_output_boxes:
             for asset in box.get('assets', []):
                 token_id = asset.get('tokenId')
@@ -122,7 +88,6 @@ class TransactionAnalyzer:
                 if not token_changes[token_id]["name"]:
                     token_changes[token_id]["name"] = asset.get('name')
         
-        # Fetch decimals for all tokens and create Token objects
         tokens = []
         for token_id, info in token_changes.items():
             if info["amount"] != 0:
@@ -138,8 +103,8 @@ class TransactionAnalyzer:
             tx_type=tx_type,
             value=value,
             fee=0.0,
-            from_address=from_address,
-            to_address=to_address,
+            from_address=None,
+            to_address=None,
             tokens=tokens,
             tx_id=tx.get('id'),
             block=None,
