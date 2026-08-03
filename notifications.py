@@ -29,11 +29,12 @@ class LogHandler(TransactionHandler):
         
         if transaction.value != 0:
             sign = "+" if transaction.value > 0 else "-"
-            message.append(f"{sign} {abs(transaction.value):.8f} ERG".strip())
+            val_str = f"{abs(transaction.value):.8f}".rstrip('0').rstrip('.')
+            message.append(f"{sign} {val_str} ERG".strip())
             
         for token in sorted(transaction.tokens, key=lambda x: abs(x.amount), reverse=True):
             token_name = token.name or f"[{token.token_id[:12]}...]"
-            formatted_amount = token.get_formatted_amount()
+            formatted_amount = token.get_formatted_amount().lstrip('-')
             sign = "+" if token.amount > 0 else "-"
             message.append(f"{sign} {formatted_amount} {token_name}")
             
@@ -99,15 +100,16 @@ class MultiTelegramHandler(TransactionHandler):
         
         if transaction.value != 0:
             sign = "+" if transaction.value > 0 else "-"
-            message.append(f"`{sign} {abs(transaction.value):.8f}` ERG")
+            val_str = f"{abs(transaction.value):.8f}".rstrip('0').rstrip('.')
+            message.append(f"{sign} {val_str} ERG")
             
         for token in sorted(transaction.tokens, key=lambda x: abs(x.amount), reverse=True):
             token_name = token.name or f"[{token.token_id[:12]}...]"
-            formatted_amount = token.get_formatted_amount()
+            formatted_amount = token.get_formatted_amount().lstrip('-')
             sign = "+" if token.amount > 0 else "-"
-            message.append(f"`{sign} {formatted_amount}` {token_name}")
+            message.append(f"{sign} {formatted_amount} {token_name}")
             
-        message.append(f"\n[View Transaction](https://ergexplorer.com/transactions#{transaction.tx_id})")
+        message.append(f"\nhttps://ergexplorer.com/transactions#{transaction.tx_id}")
 
         message_text = "\n".join(message)
         destinations = self.get_destinations_for_address(address)
@@ -125,10 +127,10 @@ class MultiTelegramHandler(TransactionHandler):
             await self.init_session()
             url = f"{self.base_url}/sendMessage"
             
+            # Using plain text (no Markdown parse_mode) to ensure default text sizing and avoid bugs
             payload = {
                 "chat_id": destination.chat_id,
                 "text": text,
-                "parse_mode": "Markdown",
                 "disable_web_page_preview": True
             }
             
@@ -139,17 +141,6 @@ class MultiTelegramHandler(TransactionHandler):
                 response_data = await response.json()
                 if response.status == 200 and response_data.get('ok'):
                     return True
-                
-                # Resilient fallback: if Markdown syntax rejects it, retry cleanly as plain text
-                if response.status == 400:
-                    self.logger.warning("Markdown parse failed, retrying message as plain text...")
-                    payload.pop("parse_mode", None)
-                    async with self.session.post(url, json=payload) as retry_response:
-                        retry_data = await retry_response.json()
-                        if retry_response.status == 200 and retry_data.get('ok'):
-                            return True
-                        error_msg = retry_data.get('description', 'Unknown error')
-                        self.logger.error(f"Failed plain text fallback. Status: {retry_response.status}, Error: {error_msg}")
                 
                 error_msg = response_data.get('description', 'Unknown error')
                 self.logger.error(f"Failed to send Telegram message. Status: {response.status}, Error: {error_msg}")
